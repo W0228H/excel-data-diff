@@ -15,8 +15,8 @@ public class DarwinModelDiffListener implements ReadListener<DarwinModelDiffData
 
     @Override
     public void invoke(DarwinModelDiffData darwinModelDiffData, AnalysisContext analysisContext) {
-        darwinModelDiffData.setDarwinData(darwinModelDiffData.getDarwinData().replaceAll("\"_", ",").replaceAll("_\"", ",\""));
-        darwinModelDiffData.setModelData(darwinModelDiffData.getModelData().replaceAll("\"_", ",").replaceAll("_\"", ",\""));
+        darwinModelDiffData.setDarwinData(darwinModelDiffData.getDarwinData().replaceAll("\"_", "\",").replaceAll("_\"", ",\""));
+        darwinModelDiffData.setModelData(darwinModelDiffData.getModelData().replaceAll("\"_", "\",").replaceAll("_\"", ",\""));
         datas.add(darwinModelDiffData);
     }
 

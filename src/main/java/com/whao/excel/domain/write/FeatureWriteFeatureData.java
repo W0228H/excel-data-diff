@@ -8,6 +8,9 @@ import java.util.Date;
 @Data
 public class FeatureWriteFeatureData {
 
+    @ExcelProperty("featureName")
+    private String featureName;
+
     @ExcelProperty("traceId")
     private String traceId;
 

@@ -1,6 +1,7 @@
 package com.whao.excel.domain.read;
 
 import com.alibaba.excel.annotation.ExcelProperty;
+import com.alibaba.excel.annotation.format.DateTimeFormat;
 import lombok.Data;
 
 import java.util.Date;
@@ -18,5 +19,6 @@ public class DarwinModelDiffData {
     private String modelData;
 
     @ExcelProperty("same_time")
+    @DateTimeFormat("MM/dd/yyyy HH:mm")
     private Date sameTime;
 }
