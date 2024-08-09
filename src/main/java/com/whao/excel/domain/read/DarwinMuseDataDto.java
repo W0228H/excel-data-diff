@@ -1,4 +1,4 @@
-package com.whao.excel.domain;
+package com.whao.excel.domain.read;
 
 import com.alibaba.excel.annotation.ExcelProperty;
 import lombok.Data;
