@@ -1,0 +1,11 @@
+server:
+  port: 8080
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 1GB
+
+output:
+  path: /Users/whao/Desktop/analyzeResult.xlsx

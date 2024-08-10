@@ -21,4 +21,13 @@ public class DarwinModelDiffData {
     @ExcelProperty("same_time")
     @DateTimeFormat("MM/dd/yyyy HH:mm")
     private Date sameTime;
+
+    public void rebuildData() {
+        this.darwinData = dataProcess(darwinData);
+        this.modelData = dataProcess(modelData);
+    }
+
+    private String dataProcess(String data) {
+        return data.replaceAll("\"_", "\",").replaceAll("_\"", ",\"");
+    }
 }
