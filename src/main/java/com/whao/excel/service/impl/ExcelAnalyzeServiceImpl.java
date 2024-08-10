@@ -49,7 +49,6 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
                         data.rebuildData();
                         darwinModelDiffData.add(data);
                     }
-
                     @Override
                     public void doAfterAllAnalysed(AnalysisContext context) {
                         log.info("Darwin model diff read finished!");
@@ -62,7 +61,6 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
             Date sameTime = rowData.getSameTime();
             JSONObject modelDataJson = JSON.parseObject(rowData.getModelData());
             JSONObject darwinDataJson = JSON.parseObject(rowData.getDarwinData());
-
             return darwinDataJson.keySet().stream().map(darwinKey -> {
                 FeatureWriteFeatureData featureWriteFeatureData = new FeatureWriteFeatureData();
                 featureWriteFeatureData.setFeatureName(darwinKey);
