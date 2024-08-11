@@ -39,6 +39,11 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
     @Value("${output.path}")
     private String outputPath;
 
+    /**
+     * 一致率总结
+     */
+    private static final Map<String, BigDecimal> concordanceRatioSummarize = new HashMap<>();
+
     @Override
     public Map<String, List<FeatureWriteFeatureData>> analyzeExcel(MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
@@ -76,10 +81,8 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
             });
         }).collect(Collectors.groupingBy(FeatureWriteFeatureData::getFeatureName));
 
-        // 一致率
-        Map<String, BigDecimal> concordanceRatio = new HashMap<>();
         for (String featureKey : analyzeDataRes.keySet()) {
-            concordanceRatio.put(featureKey, analyzeConcordanceRatio(analyzeDataRes.get(featureKey)));
+            concordanceRatioSummarize.put(featureKey, analyzeConcordanceRatio(analyzeDataRes.get(featureKey)));
         }
 
         return analyzeDataRes;
