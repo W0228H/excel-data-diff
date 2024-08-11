@@ -16,11 +16,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -56,7 +60,7 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
                 })
                 .sheet().doRead();
 
-        return darwinModelDiffData.stream().flatMap(rowData -> {
+        Map<String, List<FeatureWriteFeatureData>> analyzeDataRes = darwinModelDiffData.stream().flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date sameTime = rowData.getSameTime();
             JSONObject modelDataJson = JSON.parseObject(rowData.getModelData());
@@ -71,6 +75,23 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
                 return featureWriteFeatureData;
             });
         }).collect(Collectors.groupingBy(FeatureWriteFeatureData::getFeatureName));
+
+        // 一致率
+        Map<String, BigDecimal> concordanceRatio = new HashMap<>();
+        for (String featureKey : analyzeDataRes.keySet()) {
+            concordanceRatio.put(featureKey, analyzeConcordanceRatio(analyzeDataRes.get(featureKey)));
+        }
+
+        return analyzeDataRes;
+    }
+
+    private BigDecimal analyzeConcordanceRatio(List<FeatureWriteFeatureData> featureWriteFeatureData) {
+        long concordanceCounts = featureWriteFeatureData.stream()
+                .filter(datum -> Objects.equals(datum.getDarwinValue(), datum.getModelValue()))
+                .count();
+
+        return BigDecimal.valueOf(concordanceCounts)
+                .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 4, RoundingMode.HALF_UP);
     }
 
     private String getOrDefaultString(JSONObject json, String key) {
