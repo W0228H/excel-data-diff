@@ -3,6 +3,7 @@ package com.whao.excel.service.impl;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.metadata.data.WriteCellData;
 import com.alibaba.excel.read.listener.ReadListener;
 import com.alibaba.excel.write.metadata.WriteSheet;
 import com.alibaba.fastjson.JSON;
@@ -36,7 +37,7 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
     /**
      * 一致率总结
      */
-    private static final Map<String, Double> CONCORDANCE_RATIO_SUMMARIZE = new LinkedHashMap<>();
+    private static final Map<String, BigDecimal> CONCORDANCE_RATIO_SUMMARIZE = new LinkedHashMap<>();
 
     @Override
     public Map<String, List<FeatureWriteFeatureData>> analyzeExcel(MultipartFile file) throws IOException {
@@ -90,22 +91,24 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
 
     @Override
     public void outputExcel(Map<String, List<FeatureWriteFeatureData>> featureMapData) {
+        log.info("start write excel...");
         outputPath = System.getProperty("user.home") + "/Desktop/" + outputPath;
 
         List<FeatureWriteFeatureData.FeatureSummarizeSheet> summarizeList = featureMapData.entrySet().stream()
-                .map(entry -> new AbstractMap.SimpleEntry<>(
-                        entry.getKey(),
-                        analyzeConcordanceRatio(entry.getValue())
-                ))
-                .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
                 .map(entry -> {
-                    FeatureWriteFeatureData.FeatureSummarizeSheet summarizeSheet = new FeatureWriteFeatureData.FeatureSummarizeSheet();
-                    summarizeSheet.setFeatureName(entry.getKey());
-                    summarizeSheet.setConcordanceRate(entry.getValue().doubleValue());
-                    CONCORDANCE_RATIO_SUMMARIZE.put(entry.getKey(), entry.getValue().doubleValue());
-                    return summarizeSheet;
+                    BigDecimal concordanceRate = analyzeConcordanceRatio(entry.getValue());
+                    CONCORDANCE_RATIO_SUMMARIZE.put(entry.getKey(), concordanceRate);
+                    return new FeatureWriteFeatureData.FeatureSummarizeSheet(entry.getKey(), concordanceRate);
                 })
+                .sorted(Comparator.comparing(FeatureWriteFeatureData.FeatureSummarizeSheet::getConcordanceRate).reversed())
                 .collect(Collectors.toList());
+
+        featureMapData.forEach((key, value) -> {
+            BigDecimal concordanceRate = CONCORDANCE_RATIO_SUMMARIZE.get(key);
+            FeatureWriteFeatureData featureWriteFeatureData = value.get(0);
+            featureWriteFeatureData.setConcordanceRate(new WriteCellData<>(concordanceRate));
+            featureWriteFeatureData.beautifulFormat();
+        });
 
         try (ExcelWriter excelWriter = EasyExcel.write(outputPath).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
@@ -115,6 +118,10 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
 
             AtomicInteger sheetIndex = new AtomicInteger(1);
             featureMapData.forEach((key, data) -> {
+                BigDecimal concordanceRate = CONCORDANCE_RATIO_SUMMARIZE.get(key);
+                FeatureWriteFeatureData featureWriteFeatureData = data.get(0);
+                featureWriteFeatureData.setConcordanceRate(new WriteCellData<>(concordanceRate));
+                featureWriteFeatureData.beautifulFormat();
                 WriteSheet sheet = EasyExcel.writerSheet(sheetIndex.getAndIncrement(), canonicalSheetName(key))
                         .head(FeatureWriteFeatureData.class)
                         .build();
