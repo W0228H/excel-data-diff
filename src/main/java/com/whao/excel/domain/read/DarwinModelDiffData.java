@@ -22,9 +22,10 @@ public class DarwinModelDiffData {
     @DateTimeFormat("MM/dd/yyyy HH:mm")
     private Date sameTime;
 
-    public void rebuildData() {
+    public DarwinModelDiffData rebuildData() {
         this.darwinData = dataProcess(darwinData);
         this.modelData = dataProcess(modelData);
+        return this;
     }
 
     private String dataProcess(String data) {

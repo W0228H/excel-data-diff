@@ -8,4 +8,4 @@ spring:
       max-request-size: 1GB
 
 output:
-  path: /Users/whao/Desktop/analyzeResult.xlsx
+  path: analyzeResult.xlsx

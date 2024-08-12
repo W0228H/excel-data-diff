@@ -46,8 +46,7 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
         EasyExcel.read(file.getInputStream(), DarwinModelDiffData.class, new ReadListener<DarwinModelDiffData>() {
                     @Override
                     public void invoke(DarwinModelDiffData data, AnalysisContext context) {
-                        data.rebuildData();
-                        darwinModelDiffData.add(data);
+                        darwinModelDiffData.add(data.rebuildData());
                     }
                     @Override
                     public void doAfterAllAnalysed(AnalysisContext context) {
@@ -79,6 +78,7 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
 
     @Override
     public void outputExcel(Map<String, List<FeatureWriteFeatureData>> featureMapData) {
+        outputPath = System.getProperty("user.home") + "/Desktop/" + outputPath;
         try (ExcelWriter excelWriter = EasyExcel.write(outputPath, FeatureWriteFeatureData.class).build()) {
             int sheetIndex = 0;
             for (Map.Entry<String, List<FeatureWriteFeatureData>> entry : featureMapData.entrySet()) {
