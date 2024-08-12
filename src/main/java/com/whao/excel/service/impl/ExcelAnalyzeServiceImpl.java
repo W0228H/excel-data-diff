@@ -18,14 +18,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -42,7 +36,7 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
     /**
      * 一致率总结
      */
-    private static final Map<String, BigDecimal> concordanceRatioSummarize = new HashMap<>();
+    private static final Map<String, Double> CONCORDANCE_RATIO_SUMMARIZE = new LinkedHashMap<>();
 
     @Override
     public Map<String, List<FeatureWriteFeatureData>> analyzeExcel(MultipartFile file) throws IOException {
@@ -64,7 +58,7 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
                 })
                 .sheet().doRead();
 
-        Map<String, List<FeatureWriteFeatureData>> analyzeDataRes = darwinModelDiffData.stream().flatMap(rowData -> {
+        return darwinModelDiffData.stream().flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date sameTime = rowData.getSameTime();
             JSONObject modelDataJson = JSON.parseObject(rowData.getModelData());
@@ -79,12 +73,6 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
                 return featureWriteFeatureData;
             });
         }).collect(Collectors.groupingBy(FeatureWriteFeatureData::getFeatureName));
-
-        for (String featureKey : analyzeDataRes.keySet()) {
-            concordanceRatioSummarize.put(featureKey, analyzeConcordanceRatio(analyzeDataRes.get(featureKey)));
-        }
-
-        return analyzeDataRes;
     }
 
     private BigDecimal analyzeConcordanceRatio(List<FeatureWriteFeatureData> featureWriteFeatureData) {
@@ -103,15 +91,35 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
     @Override
     public void outputExcel(Map<String, List<FeatureWriteFeatureData>> featureMapData) {
         outputPath = System.getProperty("user.home") + "/Desktop/" + outputPath;
-        try (ExcelWriter excelWriter = EasyExcel.write(outputPath, FeatureWriteFeatureData.class).build()) {
-            int sheetIndex = 0;
-            for (Map.Entry<String, List<FeatureWriteFeatureData>> entry : featureMapData.entrySet()) {
-                String key = entry.getKey();
-                List<FeatureWriteFeatureData> data = entry.getValue();
-                // 创建 WriteSheet 实例并写入数据
-                WriteSheet sheet = EasyExcel.writerSheet(sheetIndex++, canonicalSheetName(key)).build();
+
+        List<FeatureWriteFeatureData.FeatureSummarizeSheet> summarizeList = featureMapData.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleEntry<>(
+                        entry.getKey(),
+                        analyzeConcordanceRatio(entry.getValue())
+                ))
+                .sorted(Map.Entry.<String, BigDecimal>comparingByValue().reversed())
+                .map(entry -> {
+                    FeatureWriteFeatureData.FeatureSummarizeSheet summarizeSheet = new FeatureWriteFeatureData.FeatureSummarizeSheet();
+                    summarizeSheet.setFeatureName(entry.getKey());
+                    summarizeSheet.setConcordanceRate(entry.getValue().doubleValue());
+                    CONCORDANCE_RATIO_SUMMARIZE.put(entry.getKey(), entry.getValue().doubleValue());
+                    return summarizeSheet;
+                })
+                .collect(Collectors.toList());
+
+        try (ExcelWriter excelWriter = EasyExcel.write(outputPath).build()) {
+            WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
+                    .head(FeatureWriteFeatureData.FeatureSummarizeSheet.class)
+                    .build();
+            excelWriter.write(summarizeList, summarizeSheet);
+
+            AtomicInteger sheetIndex = new AtomicInteger(1);
+            featureMapData.forEach((key, data) -> {
+                WriteSheet sheet = EasyExcel.writerSheet(sheetIndex.getAndIncrement(), canonicalSheetName(key))
+                        .head(FeatureWriteFeatureData.class)
+                        .build();
                 excelWriter.write(data, sheet);
-            }
+            });
         }
     }
 }
