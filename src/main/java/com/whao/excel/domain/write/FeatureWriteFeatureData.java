@@ -38,7 +38,7 @@ public class FeatureWriteFeatureData {
     private WriteCellData<BigDecimal> concordanceRate;
 
     public void beautifulFormat() {
-        if (this.concordanceRate.getData().compareTo(BigDecimal.valueOf(0.95d)) <= 0) {
+        if (this.concordanceRate.getNumberValue().compareTo(BigDecimal.valueOf(0.95d)) <= 0) {
             this.concordanceRate.setType(CellDataTypeEnum.NUMBER);
             WriteCellStyle writeCellStyle = new WriteCellStyle();
             this.concordanceRate.setWriteCellStyle(writeCellStyle);

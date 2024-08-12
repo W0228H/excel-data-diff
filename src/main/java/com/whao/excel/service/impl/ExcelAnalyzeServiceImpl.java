@@ -103,13 +103,6 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
                 .sorted(Comparator.comparing(FeatureWriteFeatureData.FeatureSummarizeSheet::getConcordanceRate).reversed())
                 .collect(Collectors.toList());
 
-        featureMapData.forEach((key, value) -> {
-            BigDecimal concordanceRate = CONCORDANCE_RATIO_SUMMARIZE.get(key);
-            FeatureWriteFeatureData featureWriteFeatureData = value.get(0);
-            featureWriteFeatureData.setConcordanceRate(new WriteCellData<>(concordanceRate));
-            featureWriteFeatureData.beautifulFormat();
-        });
-
         try (ExcelWriter excelWriter = EasyExcel.write(outputPath).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
                     .head(FeatureWriteFeatureData.FeatureSummarizeSheet.class)
