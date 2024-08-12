@@ -35,20 +35,23 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
      */
     @Override
     public void preProcess() {
-        ClassPathResource resource = new ClassPathResource(INPUT_FEATURE_PATH);
-        EasyExcel.read(resource.getStream(), InputFeatureDataDto.class, new ReadListener<InputFeatureDataDto>() {
-                    @Override
-                    public void invoke(InputFeatureDataDto data, AnalysisContext context) {
-                        String modelKey = data.getModelKey();
-                        String code = data.getCode();
-                        FEATURE_NAME_MAP.put(code, modelKey);
-                    }
-                    @Override
-                    public void doAfterAllAnalysed(AnalysisContext context) {
-                        log.info("input feature map handler finished!");
-                    }
-                })
-                .sheet().doRead();
+        if (FEATURE_NAME_MAP.isEmpty()) {
+            ClassPathResource resource = new ClassPathResource(INPUT_FEATURE_PATH);
+            EasyExcel.read(resource.getStream(), InputFeatureDataDto.class, new ReadListener<InputFeatureDataDto>() {
+                        @Override
+                        public void invoke(InputFeatureDataDto data, AnalysisContext context) {
+                            String modelKey = data.getModelKey();
+                            String code = data.getCode();
+                            FEATURE_NAME_MAP.put(code, modelKey);
+                        }
+
+                        @Override
+                        public void doAfterAllAnalysed(AnalysisContext context) {
+                            log.info("input feature map handler finished!");
+                        }
+                    })
+                    .sheet().doRead();
+        }
     }
 
     @Override
