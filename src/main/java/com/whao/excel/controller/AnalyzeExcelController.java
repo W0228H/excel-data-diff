@@ -1,6 +1,7 @@
 package com.whao.excel.controller;
 
-import com.whao.excel.service.impl.ExcelAnalyzeServiceImpl;
+import com.whao.excel.factory.ExcelAnalyzeFactory;
+import com.whao.excel.service.impl.ModelDarwinAnalyzeServiceImpl;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,12 +20,12 @@ import org.springframework.web.multipart.MultipartFile;
 public class AnalyzeExcelController {
 
     @Autowired
-    private ExcelAnalyzeServiceImpl excelAnalyzeService;
+    private ExcelAnalyzeFactory excelAnalyzeFactory;
 
     @PostMapping("/analyze")
-    public String analyzeExcel(@RequestParam("datasource") MultipartFile dataSource) {
+    public String analyzeExcel(@RequestParam("datasource") MultipartFile dataSource, @RequestParam("analyzeOption") String analyzeOption) {
         try {
-            excelAnalyzeService.execute(dataSource);
+            excelAnalyzeFactory.getStrategy(analyzeOption).execute(dataSource);
         } catch (Exception e) {
             log.error("AnalyzeExcel failed", e);
             return "fail";

@@ -5,7 +5,10 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.read.listener.ReadListener;
 import com.whao.excel.domain.read.InputFeatureDataDto;
+import com.whao.excel.factory.ExcelAnalyzeFactory;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.formula.functions.T;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -47,7 +50,7 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
 
                         @Override
                         public void doAfterAllAnalysed(AnalysisContext context) {
-                            log.info("input feature map handler finished!");
+                            log.info("input feature map init success!");
                         }
                     })
                     .sheet().doRead();
@@ -62,9 +65,8 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
 
     }
 
-    public Map<String, String> getFeatureNameMap() {
-        return FEATURE_NAME_MAP;
-    }
+    @Override
+    public abstract String getAnalyzeOption();
 
     public void execute(MultipartFile file) throws IOException {
         preProcess();

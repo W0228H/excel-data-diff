@@ -8,6 +8,7 @@ import com.alibaba.excel.read.listener.ReadListener;
 import com.alibaba.excel.write.metadata.WriteSheet;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.whao.excel.domain.common.FeatureSummarizeSheet;
 import com.whao.excel.domain.read.DarwinModelDiffData;
 import com.whao.excel.domain.write.FeatureWriteFeatureData;
 import com.whao.excel.service.AbstractExcelAnalyze;
@@ -29,7 +30,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
-public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile, Map<String, List<FeatureWriteFeatureData>>> {
+public class ModelDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile, Map<String, List<FeatureWriteFeatureData>>> {
 
     @Value("${output.path}")
     private String outputPath;
@@ -94,18 +95,18 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
         log.info("start write excel...");
         outputPath = System.getProperty("user.home") + "/Desktop/" + outputPath;
 
-        List<FeatureWriteFeatureData.FeatureSummarizeSheet> summarizeList = featureMapData.entrySet().stream()
+        List<FeatureSummarizeSheet> summarizeList = featureMapData.entrySet().stream()
                 .map(entry -> {
                     BigDecimal concordanceRate = analyzeConcordanceRatio(entry.getValue());
                     CONCORDANCE_RATIO_SUMMARIZE.put(entry.getKey(), concordanceRate);
-                    return new FeatureWriteFeatureData.FeatureSummarizeSheet(entry.getKey(), concordanceRate);
+                    return new FeatureSummarizeSheet(entry.getKey(), concordanceRate);
                 })
-                .sorted(Comparator.comparing(FeatureWriteFeatureData.FeatureSummarizeSheet::getConcordanceRate).reversed())
+                .sorted(Comparator.comparing(FeatureSummarizeSheet::getConcordanceRate).reversed())
                 .collect(Collectors.toList());
 
         try (ExcelWriter excelWriter = EasyExcel.write(outputPath).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
-                    .head(FeatureWriteFeatureData.FeatureSummarizeSheet.class)
+                    .head(FeatureSummarizeSheet.class)
                     .build();
             excelWriter.write(summarizeList, summarizeSheet);
 
@@ -121,5 +122,10 @@ public class ExcelAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile,
                 excelWriter.write(data, sheet);
             });
         }
+    }
+
+    @Override
+    public String getAnalyzeOption() {
+        return "model-darwin";
     }
 }

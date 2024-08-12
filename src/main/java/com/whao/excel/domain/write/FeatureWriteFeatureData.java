@@ -46,24 +46,4 @@ public class FeatureWriteFeatureData {
             writeCellStyle.setFillForegroundColor(IndexedColors.RED.getIndex());
         }
     }
-
-    /**
-     * 特征总结页面
-     */
-    @Data
-    @AllArgsConstructor
-    @NoArgsConstructor
-    public static class FeatureSummarizeSheet {
-
-        @ExcelProperty("featureName")
-        private String featureName;
-
-        /**
-         * 一致率
-         */
-        @NumberFormat("#.##%")
-        @ExcelProperty("一致率")
-        private BigDecimal concordanceRate;
-
-    }
 }

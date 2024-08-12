@@ -16,4 +16,11 @@ public interface ExcelAnalyzeService<Req extends MultipartFile, Res> {
 
     void outputExcel(Res res);
 
+    /**
+     * 分析方案
+     *
+     * @return 方案名称
+     */
+    String getAnalyzeOption();
+
 }
