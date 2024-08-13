@@ -4,6 +4,8 @@ import cn.hutool.core.io.resource.ClassPathResource;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.context.AnalysisContext;
 import com.alibaba.excel.read.listener.ReadListener;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
 import com.whao.excel.domain.read.InputFeatureDataDto;
 import com.whao.excel.factory.ExcelAnalyzeFactory;
 import lombok.extern.slf4j.Slf4j;
@@ -29,32 +31,33 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
     protected static final String INVALID_CHARACTERS = "[\\[\\]/\\\\?*]";
 
     /**
-     * 特征名称映射关系
+     * 特征名称映射关系 DW_ -> model
      */
-    protected static final Map<String, String> FEATURE_NAME_MAP = new ConcurrentHashMap<>();
+    protected static final BiMap<String, String> FEATURE_NAME_MAP = HashBiMap.create();
 
     /**
      * 前置处理, 将特征映射到本地缓存
      */
     @Override
     public void preProcess() {
-        if (FEATURE_NAME_MAP.isEmpty()) {
-            ClassPathResource resource = new ClassPathResource(INPUT_FEATURE_PATH);
-            EasyExcel.read(resource.getStream(), InputFeatureDataDto.class, new ReadListener<InputFeatureDataDto>() {
-                        @Override
-                        public void invoke(InputFeatureDataDto data, AnalysisContext context) {
-                            String modelKey = data.getModelKey();
-                            String code = data.getCode();
-                            FEATURE_NAME_MAP.put(code, modelKey);
-                        }
-
-                        @Override
-                        public void doAfterAllAnalysed(AnalysisContext context) {
-                            log.info("input feature map init success!");
-                        }
-                    })
-                    .sheet().doRead();
+        if (!FEATURE_NAME_MAP.isEmpty()) {
+            return;
         }
+        ClassPathResource resource = new ClassPathResource(INPUT_FEATURE_PATH);
+        EasyExcel.read(resource.getStream(), InputFeatureDataDto.class, new ReadListener<InputFeatureDataDto>() {
+                    @Override
+                    public void invoke(InputFeatureDataDto data, AnalysisContext context) {
+                        String modelKey = data.getModelKey();
+                        String code = data.getCode();
+                        FEATURE_NAME_MAP.put(code, modelKey);
+                    }
+
+                    @Override
+                    public void doAfterAllAnalysed(AnalysisContext context) {
+                        log.info("input feature map init success!");
+                    }
+                })
+                .sheet().doRead();
     }
 
     @Override

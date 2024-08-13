@@ -2,8 +2,12 @@ package com.whao.excel.domain.write;
 
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.format.NumberFormat;
+import com.alibaba.excel.enums.CellDataTypeEnum;
 import com.alibaba.excel.metadata.data.WriteCellData;
+import com.alibaba.excel.write.metadata.style.WriteCellStyle;
 import lombok.Data;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.IndexedColors;
 
 import java.math.BigDecimal;
 import java.util.Date;
@@ -36,4 +40,14 @@ public class MuseDarwinWriteFeatureData {
     @NumberFormat("#.##%")
     @ExcelProperty("一致率")
     private WriteCellData<BigDecimal> concordanceRate;
+
+    public void beautifulFormat() {
+        if (this.concordanceRate.getNumberValue().compareTo(BigDecimal.valueOf(0.95d)) <= 0) {
+            this.concordanceRate.setType(CellDataTypeEnum.NUMBER);
+            WriteCellStyle writeCellStyle = new WriteCellStyle();
+            this.concordanceRate.setWriteCellStyle(writeCellStyle);
+            writeCellStyle.setFillPatternType(FillPatternType.SOLID_FOREGROUND);
+            writeCellStyle.setFillForegroundColor(IndexedColors.RED.getIndex());
+        }
+    }
 }

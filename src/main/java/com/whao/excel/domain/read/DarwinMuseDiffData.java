@@ -29,4 +29,14 @@ public class DarwinMuseDiffData {
     @ExcelProperty("darwin_time")
     @DateTimeFormat("MM/dd/yyyy HH:mm")
     private Date darwinTime;
+
+    public DarwinMuseDiffData rebuildData() {
+        this.darwinData = dataProcess(darwinData);
+        this.museData = dataProcess(museData);
+        return this;
+    }
+
+    private String dataProcess(String data) {
+        return data.replaceAll("\"_", "\",").replaceAll("_\"", ",\"");
+    }
 }
