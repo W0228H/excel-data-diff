@@ -101,7 +101,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     @Override
     public void outputExcel(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
         log.info("start write excel...");
-        outputPath = System.getProperty("user.home") + "/Desktop/" + outputPath;
+        String path = System.getProperty("user.home") + "/Desktop/" + outputPath;
 
         List<FeatureSummarizeSheet> summarizeList = featureMapData.entrySet().stream()
                 .map(entry -> {
@@ -112,7 +112,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .sorted(Comparator.comparing(FeatureSummarizeSheet::getConcordanceRate).reversed())
                 .collect(Collectors.toList());
 
-        try (ExcelWriter excelWriter = EasyExcel.write(outputPath).build()) {
+        try (ExcelWriter excelWriter = EasyExcel.write(path).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
                     .head(FeatureSummarizeSheet.class)
                     .build();
@@ -125,7 +125,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 featureWriteFeatureData.setConcordanceRate(new WriteCellData<>(concordanceRate));
                 featureWriteFeatureData.beautifulFormat();
                 WriteSheet sheet = EasyExcel.writerSheet(sheetIndex.getAndIncrement(), canonicalSheetName(key))
-                        .head(FeatureWriteFeatureData.class)
+                        .head(MuseDarwinWriteFeatureData.class)
                         .build();
                 excelWriter.write(data, sheet);
             });
