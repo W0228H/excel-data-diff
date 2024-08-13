@@ -23,6 +23,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -65,7 +67,11 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .sheet().doRead();
 
         BiMap<String, String> inverse = FEATURE_NAME_MAP.inverse();
-        return darwinMuseDiffData.stream().flatMap(rowData -> {
+        return darwinMuseDiffData.stream()
+                .filter(rowData -> rowData.getDarwinTime().toInstant()
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 12, 19, 30)))
+                .flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date museTime = rowData.getMuseTime();
             Date darwinTime = rowData.getDarwinTime();
