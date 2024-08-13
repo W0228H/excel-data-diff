@@ -70,7 +70,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
         return darwinMuseDiffData.stream()
                 .filter(rowData -> rowData.getDarwinTime().toInstant()
                         .atZone(ZoneId.systemDefault())
-                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 12, 19, 30)))
+                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 12, 19, 0)))
                 .flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date museTime = rowData.getMuseTime();
@@ -82,6 +82,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                         MuseDarwinWriteFeatureData museDarwinWriteFeatureData = new MuseDarwinWriteFeatureData();
                         museDarwinWriteFeatureData.setTraceId(traceId);
                         museDarwinWriteFeatureData.setFeatureName(inverse.get(modelKey));
+                        museDarwinWriteFeatureData.setModelName(modelKey);
                         museDarwinWriteFeatureData.setDarwinValue(getOrDefaultString(darwinDataJson, modelKey));
                         museDarwinWriteFeatureData.setMuseValue(getOrDefaultString(museDataJson, modelKey));
                         museDarwinWriteFeatureData.setDarwinTime(darwinTime);
@@ -118,6 +119,16 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .sorted(Comparator.comparing(FeatureSummarizeSheet::getConcordanceRate).reversed())
                 .collect(Collectors.toList());
 
+        // 只输出不一致的数据
+        Map<String, List<MuseDarwinWriteFeatureData>> diffData = featureMapData.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(),
+                        entry.getValue().stream()
+                                .filter(data -> !Objects.equals(data.getDarwinValue(), data.getMuseValue()))
+                                .collect(Collectors.toList())))
+                .filter(entry -> !entry.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+
         try (ExcelWriter excelWriter = EasyExcel.write(path).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
                     .head(FeatureSummarizeSheet.class)
@@ -125,17 +136,24 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
             excelWriter.write(summarizeList, summarizeSheet);
 
             AtomicInteger sheetIndex = new AtomicInteger(1);
-            featureMapData.forEach((key, data) -> {
+            diffData.forEach((key, data) -> {
+                String sheetName = canonicalSheetName(key);
+                int currentSheetIndex = sheetIndex.getAndIncrement();
+                log.info("Creating sheet with index: {}, name: {}", currentSheetIndex, sheetName);
+
                 BigDecimal concordanceRate = CONCORDANCE_RATIO_SUMMARIZE.get(key);
                 MuseDarwinWriteFeatureData featureWriteFeatureData = data.get(0);
                 featureWriteFeatureData.setConcordanceRate(new WriteCellData<>(concordanceRate));
                 featureWriteFeatureData.beautifulFormat();
-                WriteSheet sheet = EasyExcel.writerSheet(sheetIndex.getAndIncrement(), canonicalSheetName(key))
+
+                WriteSheet sheet = EasyExcel.writerSheet(currentSheetIndex, sheetName)
                         .head(MuseDarwinWriteFeatureData.class)
                         .build();
                 excelWriter.write(data, sheet);
             });
         }
+
+        log.info("write success !!!");
     }
 
     @Override

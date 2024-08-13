@@ -22,6 +22,9 @@ public class MuseDarwinWriteFeatureData {
     @ExcelProperty("featureName")
     private String featureName;
 
+    @ExcelProperty("modelName")
+    private String modelName;
+
     @ExcelProperty("traceId")
     private String traceId;
 
