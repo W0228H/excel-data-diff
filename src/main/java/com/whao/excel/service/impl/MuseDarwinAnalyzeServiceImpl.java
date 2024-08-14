@@ -109,9 +109,9 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     public void outputExcel(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
         log.info("start write excel...");
 
-        String timeoutDataPath = COMMON_PATH + concordanceRatePath;
+        String timeoutDataPath = COMMON_PATH + timeoutPath;
 
-        String concordanceRateOutputPath = COMMON_PATH + timeoutPath;
+        String concordanceRateOutputPath = COMMON_PATH + concordanceRatePath;
 
         // 计算每一个特征的一致率并且按照特征名称进行字典排序
         List<FeatureSummarizeSheet> summarizeList = consensusRateCalculation(featureMapData);
@@ -204,10 +204,6 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
 
         return BigDecimal.valueOf(concordanceCounts)
                 .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 15, RoundingMode.HALF_UP);
-    }
-
-    private boolean isEmptyFeature(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
-        return featureWriteFeatureData.stream().noneMatch(datum -> !Objects.equals(datum.getDarwinValue(), "empty") && !Objects.equals(datum.getMuseValue(), "empty"));
     }
 
     private String getOrDefaultString(JSONObject json, String key) {
