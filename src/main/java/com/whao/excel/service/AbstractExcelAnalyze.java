@@ -11,8 +11,10 @@ import com.whao.excel.factory.ExcelAnalyzeFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.formula.functions.T;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +28,8 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
 
     private static final String INPUT_FEATURE_PATH = "/data/inputFeature.csv";
 
+    protected static final String COMMON_PATH = System.getProperty("user.home") + "/Desktop/特征一致率数据汇总/";
+
     protected static final int MAX_SHEET_NAME_LENGTH = 31;
 
     protected static final String INVALID_CHARACTERS = "[\\[\\]/\\\\?*]";
@@ -34,6 +38,13 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
      * 特征名称映射关系 model -> DW_
      */
     protected static final BiMap<String, String> FEATURE_NAME_MAP = HashBiMap.create();
+
+    static {
+        File commonFile = new File(COMMON_PATH);
+        if (commonFile.mkdirs()) {
+            log.info("文件夹初始化创建完成!");
+        }
+    }
 
     /**
      * 前置处理, 将特征映射到本地缓存

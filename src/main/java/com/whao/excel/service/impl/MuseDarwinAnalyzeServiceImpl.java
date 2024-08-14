@@ -21,6 +21,8 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,7 +35,7 @@ import java.util.stream.Collectors;
 public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile, Map<String, List<MuseDarwinWriteFeatureData>>> {
 
     @Value("${output.path.summarize}")
-    private String outputPath;
+    private String concordanceRatePath;
 
     @Value("${output.path.timeoutConclusion}")
     private String timeoutPath;
@@ -66,7 +68,11 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
 
         log.info("darwinMuseDiffData.size:{}", darwinMuseDiffData.size());
 
-        return darwinMuseDiffData.stream().flatMap(rowData -> {
+        return darwinMuseDiffData.stream()
+                .filter(rowData -> rowData.getDarwinTime().toInstant()
+                        .atZone(ZoneId.systemDefault())
+                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 14, 14, 0)))
+                .flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date museTime = rowData.getMuseTime();
             Date darwinTime = rowData.getDarwinTime();
@@ -84,29 +90,17 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                         museDarwinWriteFeatureData.setDarwinTime(darwinTime);
                         museDarwinWriteFeatureData.setMuseTime(museTime);
                         return museDarwinWriteFeatureData;
-                    }).filter(data -> !Objects.equals(data.getDarwinValue(), "empty") && !Objects.equals(data.getMuseValue(), "empty"));
+                    });
         }).collect(Collectors.groupingBy(MuseDarwinWriteFeatureData::getModelName));
-    }
-
-    private BigDecimal analyzeConcordanceRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
-        long concordanceCounts = featureWriteFeatureData.stream()
-                .filter(datum -> new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal(datum.getMuseValue())) == 0)
-                .count();
-
-        return BigDecimal.valueOf(concordanceCounts)
-                .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 15, RoundingMode.HALF_UP);
-    }
-
-    private String getOrDefaultString(JSONObject json, String key) {
-        return Optional.ofNullable(json.get(key)).map(Object::toString).orElse("empty");
     }
 
     @Override
     public void outputExcel(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
         log.info("start write excel...");
-        String path = System.getProperty("user.home") + "/Desktop/" + outputPath;
-        String tPath = System.getProperty("user.home") + "/Desktop/" + timeoutPath;
-        String allExcelPath = System.getProperty("user.home") + "/Desktop/特征一致性详情/";
+
+        String timeoutDataPath = COMMON_PATH + concordanceRatePath;
+
+        String concordanceRateOutputPath = COMMON_PATH + timeoutPath;
 
         // 计算每一个特征的一致率并且按照特征名称进行字典排序
         List<FeatureSummarizeSheet> summarizeList = consensusRateCalculation(featureMapData);
@@ -114,29 +108,43 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
         // 分析每个特征的超时个数以及超时率
         List<FeatureTimeoutRate> timeoutRates = analyzeFeatureTimeoutRate(featureMapData);
 
-        try (ExcelWriter summarizeWriter = EasyExcel.write(tPath).build()) {
+        // 只输出不一致的数据
+        Map<String, List<MuseDarwinWriteFeatureData>> diffData = featureMapData.entrySet().stream()
+                .map(entry -> new AbstractMap.SimpleEntry<>(
+                        entry.getKey(),
+                        entry.getValue().stream()
+                                .filter(data -> !Objects.equals(data.getDarwinValue(), "empty") || !Objects.equals(data.getMuseValue(), "empty"))
+                                .filter(data -> new BigDecimal(data.getDarwinValue()).compareTo(new BigDecimal(data.getMuseValue())) != 0)
+                                .collect(Collectors.toList())))
+                .filter(entry -> !entry.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        try (ExcelWriter summarizeWriter = EasyExcel.write(timeoutDataPath).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征超时率总结")
                     .head(FeatureTimeoutRate.class)
                     .build();
             summarizeWriter.write(timeoutRates, summarizeSheet);
         }
 
-        try (ExcelWriter summarizeWriter = EasyExcel.write(path).build()) {
+        try (ExcelWriter summarizeWriter = EasyExcel.write(concordanceRateOutputPath).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
                     .head(FeatureSummarizeSheet.class)
                     .build();
             summarizeWriter.write(summarizeList, summarizeSheet);
         }
 
-        for (Map.Entry<String, List<MuseDarwinWriteFeatureData>> entry : featureMapData.entrySet()) {
+        for (Map.Entry<String, List<MuseDarwinWriteFeatureData>> entry : diffData.entrySet()) {
             String modelKey = entry.getKey();
             List<MuseDarwinWriteFeatureData> data = entry.getValue();
-            try (ExcelWriter excelWriter = EasyExcel.write(allExcelPath + modelKey + ".xlsx").build()) {
+            try (ExcelWriter excelWriter = EasyExcel.write(COMMON_PATH + modelKey + ".xlsx").build()) {
                 BigDecimal rate = CONCORDANCE_RATIO_SUMMARIZE.get(modelKey);
+                if (rate == null) {
+                    continue;
+                }
                 MuseDarwinWriteFeatureData museDarwinWriteFeatureData = data.get(0);
                 museDarwinWriteFeatureData.setConcordanceRate(new WriteCellData<>(rate));
                 museDarwinWriteFeatureData.beautifulFormat();
-                WriteSheet sheet = EasyExcel.writerSheet(0, modelKey)
+                WriteSheet sheet = EasyExcel.writerSheet(0, canonicalSheetName(modelKey))
                         .head(MuseDarwinWriteFeatureData.class)
                         .build();
                 excelWriter.write(data, sheet);
@@ -144,11 +152,6 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
         }
 
         log.info("write success !!!");
-    }
-
-    @Override
-    public String getAnalyzeOption() {
-        return "muse-darwin";
     }
 
     /**
@@ -159,12 +162,34 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     private List<FeatureSummarizeSheet> consensusRateCalculation(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
         return featureMapData.entrySet().stream()
                 .map(entry -> {
+                    String modelKey = entry.getKey();
                     BigDecimal bigDecimal = analyzeConcordanceRatio(entry.getValue());
-                    CONCORDANCE_RATIO_SUMMARIZE.put(entry.getKey(), bigDecimal);
-                    return new FeatureSummarizeSheet(entry.getKey(), bigDecimal);
+                    CONCORDANCE_RATIO_SUMMARIZE.put(modelKey, bigDecimal);
+                    return new FeatureSummarizeSheet(FEATURE_NAME_MAP.get(modelKey), modelKey, bigDecimal);
                 })
-                .sorted(Comparator.comparing(FeatureSummarizeSheet::getFeatureName))
+                .sorted(Comparator.comparing(FeatureSummarizeSheet::getModelName))
                 .collect(Collectors.toList());
+    }
+
+    private BigDecimal analyzeConcordanceRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
+        if (isEmptyFeature(featureWriteFeatureData)) {
+            return null;
+        }
+
+        long concordanceCounts = featureWriteFeatureData.stream()
+                .filter(datum -> new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal(datum.getMuseValue())) == 0)
+                .count();
+
+        return BigDecimal.valueOf(concordanceCounts)
+                .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 15, RoundingMode.HALF_UP);
+    }
+
+    private boolean isEmptyFeature(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
+        return featureWriteFeatureData.stream().noneMatch(datum -> !Objects.equals(datum.getDarwinValue(), "empty") && !Objects.equals(datum.getMuseValue(), "empty"));
+    }
+
+    private String getOrDefaultString(JSONObject json, String key) {
+        return Optional.ofNullable(json.get(key)).map(Object::toString).orElse("empty");
     }
 
     /**
@@ -178,21 +203,40 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
         for (Map.Entry<String, List<MuseDarwinWriteFeatureData>> entry : featureMapData.entrySet()) {
             FeatureTimeoutRate featureTimeoutRate = new FeatureTimeoutRate();
             String modelName = entry.getKey();
-            List<MuseDarwinWriteFeatureData> data = entry.getValue();
-            long count = 0;
-            for (MuseDarwinWriteFeatureData datum : data) {
-                if (new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) == 0
-                        && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) != 0) {
-                    count++;
-                }
-            }
             featureTimeoutRate.setModelName(modelName);
             featureTimeoutRate.setDarwinName(FEATURE_NAME_MAP.get(modelName));
+            List<MuseDarwinWriteFeatureData> data = entry.getValue();
+            long count = 0;
+
+            if (isEmptyFeature(data)) {
+                featureTimeoutRate.setTimeoutCounts(0L);
+                featureTimeoutRate.setTotalCounts(0);
+                timeoutRates.add(featureTimeoutRate);
+                continue;
+            }
+            for (MuseDarwinWriteFeatureData datum : data) {
+                try {
+                    if (new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) == 0
+                            && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) != 0) {
+                        count++;
+                    }
+                } catch (Exception e) {
+                    String darwinValue = datum.getDarwinValue();
+                    String museValue = datum.getMuseValue();
+                    log.error("darwinValue:{}, museValue:{}", darwinValue, museValue);
+                    System.exit(0);
+                }
+            }
             featureTimeoutRate.setTimeoutCounts(count);
             featureTimeoutRate.setTotalCounts(data.size());
             featureTimeoutRate.setTimeoutRate(BigDecimal.valueOf(count).divide(BigDecimal.valueOf(data.size()), 6, RoundingMode.HALF_UP));
             timeoutRates.add(featureTimeoutRate);
         }
         return timeoutRates;
+    }
+
+    @Override
+    public String getAnalyzeOption() {
+        return "muse-darwin";
     }
 }

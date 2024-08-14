@@ -21,8 +21,11 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class FeatureSummarizeSheet {
 
-    @ExcelProperty("featureName")
-    private String featureName;
+    @ExcelProperty("darwin名称")
+    private String darwinName;
+
+    @ExcelProperty("模型名称")
+    private String modelName;
 
     /**
      * 一致率
