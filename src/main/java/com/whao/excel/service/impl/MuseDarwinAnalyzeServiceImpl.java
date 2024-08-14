@@ -66,22 +66,19 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 })
                 .sheet().doRead();
 
-        BiMap<String, String> inverse = FEATURE_NAME_MAP.inverse();
-        return darwinMuseDiffData.stream()
-                .filter(rowData -> rowData.getDarwinTime().toInstant()
-                        .atZone(ZoneId.systemDefault())
-                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 12, 19, 0)))
-                .flatMap(rowData -> {
+        log.info("darwinMuseDiffData.size:{}", darwinMuseDiffData.size());
+
+        return darwinMuseDiffData.stream().flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date museTime = rowData.getMuseTime();
             Date darwinTime = rowData.getDarwinTime();
             JSONObject museDataJson = JSON.parseObject(rowData.getMuseData());
             JSONObject darwinDataJson = JSON.parseObject(rowData.getDarwinData());
 
-            return inverse.keySet().stream().map(modelKey -> {
+            return FEATURE_NAME_MAP.keySet().stream().map(modelKey -> {
                         MuseDarwinWriteFeatureData museDarwinWriteFeatureData = new MuseDarwinWriteFeatureData();
                         museDarwinWriteFeatureData.setTraceId(traceId);
-                        museDarwinWriteFeatureData.setFeatureName(inverse.get(modelKey));
+                        museDarwinWriteFeatureData.setDarwinName(FEATURE_NAME_MAP.get(modelKey));
                         museDarwinWriteFeatureData.setModelName(modelKey);
                         museDarwinWriteFeatureData.setDarwinValue(getOrDefaultString(darwinDataJson, modelKey));
                         museDarwinWriteFeatureData.setMuseValue(getOrDefaultString(museDataJson, modelKey));
@@ -89,7 +86,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                         museDarwinWriteFeatureData.setMuseTime(museTime);
                         return museDarwinWriteFeatureData;
                     });
-        }).collect(Collectors.groupingBy(MuseDarwinWriteFeatureData::getFeatureName));
+        }).collect(Collectors.groupingBy(MuseDarwinWriteFeatureData::getModelName));
     }
 
     private BigDecimal analyzeConcordanceRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
@@ -102,7 +99,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     }
 
     private String getOrDefaultString(JSONObject json, String key) {
-        return Optional.ofNullable(json.get(key)).map(Object::toString).orElse("null");
+        return Optional.ofNullable(json.get(key)).map(Object::toString).orElse("empty");
     }
 
     @Override

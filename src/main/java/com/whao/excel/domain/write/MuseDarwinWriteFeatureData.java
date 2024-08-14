@@ -19,8 +19,8 @@ import java.util.Date;
 @Data
 public class MuseDarwinWriteFeatureData {
 
-    @ExcelProperty("featureName")
-    private String featureName;
+    @ExcelProperty("darwinName")
+    private String darwinName;
 
     @ExcelProperty("modelName")
     private String modelName;

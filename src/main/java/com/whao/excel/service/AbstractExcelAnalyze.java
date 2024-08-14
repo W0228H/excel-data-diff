@@ -31,7 +31,7 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
     protected static final String INVALID_CHARACTERS = "[\\[\\]/\\\\?*]";
 
     /**
-     * 特征名称映射关系 DW_ -> model
+     * 特征名称映射关系 model -> DW_
      */
     protected static final BiMap<String, String> FEATURE_NAME_MAP = HashBiMap.create();
 
@@ -49,7 +49,7 @@ public abstract class AbstractExcelAnalyze<Req extends MultipartFile, Res> imple
                     public void invoke(InputFeatureDataDto data, AnalysisContext context) {
                         String modelKey = data.getModelKey();
                         String code = data.getCode();
-                        FEATURE_NAME_MAP.put(code, modelKey);
+                        FEATURE_NAME_MAP.put(modelKey, code);
                     }
 
                     @Override
