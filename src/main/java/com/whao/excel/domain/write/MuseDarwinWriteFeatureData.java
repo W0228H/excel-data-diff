@@ -34,6 +34,9 @@ public class MuseDarwinWriteFeatureData {
     @ExcelProperty("muse的值")
     private String museValue;
 
+    @ExcelProperty("diff")
+    private boolean diff;
+
     @ExcelProperty("darwin时间")
     private Date darwinTime;
 

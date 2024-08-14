@@ -21,7 +21,7 @@ public class FeatureTimeoutRate {
     private String modelName;
 
     @ExcelProperty("超时次数")
-    private Long timeoutCounts;
+    private Integer timeoutCounts;
 
     @ExcelProperty("请求总数")
     private Integer totalCounts;
