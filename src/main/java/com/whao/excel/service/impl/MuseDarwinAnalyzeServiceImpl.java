@@ -215,16 +215,9 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 continue;
             }
             for (MuseDarwinWriteFeatureData datum : data) {
-                try {
-                    if (new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) == 0
-                            && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) != 0) {
-                        count++;
-                    }
-                } catch (Exception e) {
-                    String darwinValue = datum.getDarwinValue();
-                    String museValue = datum.getMuseValue();
-                    log.error("darwinValue:{}, museValue:{}", darwinValue, museValue);
-                    System.exit(0);
+                if (new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) == 0
+                        && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) != 0) {
+                    count++;
                 }
             }
             featureTimeoutRate.setTimeoutCounts(count);
