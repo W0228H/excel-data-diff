@@ -8,11 +8,8 @@ import com.alibaba.excel.read.listener.ReadListener;
 import com.alibaba.excel.write.metadata.WriteSheet;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
-import com.google.common.collect.BiMap;
 import com.whao.excel.domain.common.FeatureSummarizeSheet;
-import com.whao.excel.domain.read.DarwinModelDiffData;
 import com.whao.excel.domain.read.DarwinMuseDiffData;
-import com.whao.excel.domain.write.FeatureWriteFeatureData;
 import com.whao.excel.domain.write.MuseDarwinWriteFeatureData;
 import com.whao.excel.service.AbstractExcelAnalyze;
 import lombok.extern.slf4j.Slf4j;
@@ -23,8 +20,6 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -37,7 +32,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<MultipartFile, Map<String, List<MuseDarwinWriteFeatureData>>> {
 
-    @Value("${output.path}")
+    @Value("${output.path.summarize}")
     private String outputPath;
 
     /**
@@ -75,7 +70,8 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
             JSONObject museDataJson = JSON.parseObject(rowData.getMuseData());
             JSONObject darwinDataJson = JSON.parseObject(rowData.getDarwinData());
 
-            return FEATURE_NAME_MAP.keySet().stream().map(modelKey -> {
+            return FEATURE_NAME_MAP.keySet().stream()
+                    .map(modelKey -> {
                         MuseDarwinWriteFeatureData museDarwinWriteFeatureData = new MuseDarwinWriteFeatureData();
                         museDarwinWriteFeatureData.setTraceId(traceId);
                         museDarwinWriteFeatureData.setDarwinName(FEATURE_NAME_MAP.get(modelKey));
@@ -85,7 +81,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                         museDarwinWriteFeatureData.setDarwinTime(darwinTime);
                         museDarwinWriteFeatureData.setMuseTime(museTime);
                         return museDarwinWriteFeatureData;
-                    });
+                    }).filter(data -> !Objects.equals(data.getDarwinValue(), "empty") && !Objects.equals(data.getMuseValue(), "empty"));
         }).collect(Collectors.groupingBy(MuseDarwinWriteFeatureData::getModelName));
     }
 
@@ -95,7 +91,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .count();
 
         return BigDecimal.valueOf(concordanceCounts)
-                .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 4, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 15, RoundingMode.HALF_UP);
     }
 
     private String getOrDefaultString(JSONObject json, String key) {
@@ -106,48 +102,31 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     public void outputExcel(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
         log.info("start write excel...");
         String path = System.getProperty("user.home") + "/Desktop/" + outputPath;
+        String allExcelPath = System.getProperty("user.home") + "/Desktop/特征一致性详情/";
 
-        List<FeatureSummarizeSheet> summarizeList = featureMapData.entrySet().stream()
-                .map(entry -> {
-                    BigDecimal concordanceRate = analyzeConcordanceRatio(entry.getValue());
-                    CONCORDANCE_RATIO_SUMMARIZE.put(entry.getKey(), concordanceRate);
-                    return new FeatureSummarizeSheet(entry.getKey(), concordanceRate);
-                })
-                .sorted(Comparator.comparing(FeatureSummarizeSheet::getConcordanceRate).reversed())
-                .collect(Collectors.toList());
+        // 计算每一个特征的一致率并且按照特征名称进行字典排序
+        List<FeatureSummarizeSheet> summarizeList = consensusRateCalculation(featureMapData);
 
-        // 只输出不一致的数据
-        Map<String, List<MuseDarwinWriteFeatureData>> diffData = featureMapData.entrySet().stream()
-                .map(entry -> new AbstractMap.SimpleEntry<>(entry.getKey(),
-                        entry.getValue().stream()
-                                .filter(data -> !Objects.equals(data.getDarwinValue(), data.getMuseValue()))
-                                .collect(Collectors.toList())))
-                .filter(entry -> !entry.getValue().isEmpty())
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-
-
-        try (ExcelWriter excelWriter = EasyExcel.write(path).build()) {
+        try (ExcelWriter summarizeWriter = EasyExcel.write(path).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
                     .head(FeatureSummarizeSheet.class)
                     .build();
-            excelWriter.write(summarizeList, summarizeSheet);
+            summarizeWriter.write(summarizeList, summarizeSheet);
+        }
 
-            AtomicInteger sheetIndex = new AtomicInteger(1);
-            diffData.forEach((key, data) -> {
-                String sheetName = canonicalSheetName(key);
-                int currentSheetIndex = sheetIndex.getAndIncrement();
-                log.info("Creating sheet with index: {}, name: {}", currentSheetIndex, sheetName);
-
-                BigDecimal concordanceRate = CONCORDANCE_RATIO_SUMMARIZE.get(key);
-                MuseDarwinWriteFeatureData featureWriteFeatureData = data.get(0);
-                featureWriteFeatureData.setConcordanceRate(new WriteCellData<>(concordanceRate));
-                featureWriteFeatureData.beautifulFormat();
-
-                WriteSheet sheet = EasyExcel.writerSheet(currentSheetIndex, sheetName)
+        for (Map.Entry<String, List<MuseDarwinWriteFeatureData>> entry : featureMapData.entrySet()) {
+            String modelKey = entry.getKey();
+            List<MuseDarwinWriteFeatureData> data = entry.getValue();
+            try (ExcelWriter excelWriter = EasyExcel.write(allExcelPath + modelKey + ".xlsx").build()) {
+                BigDecimal rate = CONCORDANCE_RATIO_SUMMARIZE.get(modelKey);
+                MuseDarwinWriteFeatureData museDarwinWriteFeatureData = data.get(0);
+                museDarwinWriteFeatureData.setConcordanceRate(new WriteCellData<>(rate));
+                museDarwinWriteFeatureData.beautifulFormat();
+                WriteSheet sheet = EasyExcel.writerSheet(0, modelKey)
                         .head(MuseDarwinWriteFeatureData.class)
                         .build();
                 excelWriter.write(data, sheet);
-            });
+            }
         }
 
         log.info("write success !!!");
@@ -156,5 +135,21 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     @Override
     public String getAnalyzeOption() {
         return "muse-darwin";
+    }
+
+    /**
+     * 一致率计算
+     *
+     * @param featureMapData data
+     */
+    private List<FeatureSummarizeSheet> consensusRateCalculation(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
+        return featureMapData.entrySet().stream()
+                .map(entry -> {
+                    BigDecimal bigDecimal = analyzeConcordanceRatio(entry.getValue());
+                    CONCORDANCE_RATIO_SUMMARIZE.put(entry.getKey(), bigDecimal);
+                    return new FeatureSummarizeSheet(entry.getKey(), bigDecimal);
+                })
+                .sorted(Comparator.comparing(FeatureSummarizeSheet::getFeatureName))
+                .collect(Collectors.toList());
     }
 }

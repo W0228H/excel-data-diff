@@ -23,11 +23,11 @@ public class DarwinMuseDiffData {
     private String darwinData;
 
     @ExcelProperty("muse_time")
-    @DateTimeFormat("MM/dd/yyyy HH:mm")
+    @DateTimeFormat("yyyy-MM-dd HH:mm:ss")
     private Date museTime;
 
     @ExcelProperty("darwin_time")
-    @DateTimeFormat("MM/dd/yyyy HH:mm")
+    @DateTimeFormat("yyyy-MM-dd HH:mm:ss")
     private Date darwinTime;
 
     public DarwinMuseDiffData rebuildData() {

@@ -8,4 +8,6 @@ spring:
       max-request-size: 1GB
 
 output:
-  path: analyzeResult.xlsx
+  path:
+    summarize: 特征一致率总结.xlsx
+
