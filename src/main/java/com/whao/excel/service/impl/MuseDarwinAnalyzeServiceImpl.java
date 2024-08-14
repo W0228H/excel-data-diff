@@ -9,6 +9,7 @@ import com.alibaba.excel.write.metadata.WriteSheet;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.whao.excel.domain.common.FeatureSummarizeSheet;
+import com.whao.excel.domain.common.FeatureTimeoutRate;
 import com.whao.excel.domain.read.DarwinMuseDiffData;
 import com.whao.excel.domain.write.MuseDarwinWriteFeatureData;
 import com.whao.excel.service.AbstractExcelAnalyze;
@@ -21,7 +22,6 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -34,6 +34,9 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
 
     @Value("${output.path.summarize}")
     private String outputPath;
+
+    @Value("${output.path.timeoutConclusion}")
+    private String timeoutPath;
 
     /**
      * 一致率总结
@@ -87,7 +90,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
 
     private BigDecimal analyzeConcordanceRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
         long concordanceCounts = featureWriteFeatureData.stream()
-                .filter(datum -> Objects.equals(datum.getDarwinValue(), datum.getMuseValue()))
+                .filter(datum -> new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal(datum.getMuseValue())) == 0)
                 .count();
 
         return BigDecimal.valueOf(concordanceCounts)
@@ -102,10 +105,21 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     public void outputExcel(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
         log.info("start write excel...");
         String path = System.getProperty("user.home") + "/Desktop/" + outputPath;
+        String tPath = System.getProperty("user.home") + "/Desktop/" + timeoutPath;
         String allExcelPath = System.getProperty("user.home") + "/Desktop/特征一致性详情/";
 
         // 计算每一个特征的一致率并且按照特征名称进行字典排序
         List<FeatureSummarizeSheet> summarizeList = consensusRateCalculation(featureMapData);
+
+        // 分析每个特征的超时个数以及超时率
+        List<FeatureTimeoutRate> timeoutRates = analyzeFeatureTimeoutRate(featureMapData);
+
+        try (ExcelWriter summarizeWriter = EasyExcel.write(tPath).build()) {
+            WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征超时率总结")
+                    .head(FeatureTimeoutRate.class)
+                    .build();
+            summarizeWriter.write(timeoutRates, summarizeSheet);
+        }
 
         try (ExcelWriter summarizeWriter = EasyExcel.write(path).build()) {
             WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
@@ -151,5 +165,34 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 })
                 .sorted(Comparator.comparing(FeatureSummarizeSheet::getFeatureName))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 超时率
+     *
+     * @param featureMapData data
+     * @return 超时率
+     */
+    private List<FeatureTimeoutRate> analyzeFeatureTimeoutRate(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
+        List<FeatureTimeoutRate> timeoutRates = new ArrayList<>();
+        for (Map.Entry<String, List<MuseDarwinWriteFeatureData>> entry : featureMapData.entrySet()) {
+            FeatureTimeoutRate featureTimeoutRate = new FeatureTimeoutRate();
+            String modelName = entry.getKey();
+            List<MuseDarwinWriteFeatureData> data = entry.getValue();
+            long count = 0;
+            for (MuseDarwinWriteFeatureData datum : data) {
+                if (new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) == 0
+                        && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) != 0) {
+                    count++;
+                }
+            }
+            featureTimeoutRate.setModelName(modelName);
+            featureTimeoutRate.setDarwinName(FEATURE_NAME_MAP.get(modelName));
+            featureTimeoutRate.setTimeoutCounts(count);
+            featureTimeoutRate.setTotalCounts(data.size());
+            featureTimeoutRate.setTimeoutRate(BigDecimal.valueOf(count).divide(BigDecimal.valueOf(data.size()), 6, RoundingMode.HALF_UP));
+            timeoutRates.add(featureTimeoutRate);
+        }
+        return timeoutRates;
     }
 }
