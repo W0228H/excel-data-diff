@@ -74,7 +74,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
         return darwinMuseDiffData.stream()
                 .filter(rowData -> rowData.getDarwinTime().toInstant()
                         .atZone(ZoneId.systemDefault())
-                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 14, 14, 0)))
+                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 17, 0, 0)))
                 .flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date museTime = rowData.getMuseTime();
@@ -108,6 +108,11 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     @Override
     public void outputExcel(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
         log.info("start write excel...");
+
+        if (featureMapData.isEmpty()) {
+            log.error("无数据");
+            return;
+        }
 
         String timeoutDataPath = COMMON_PATH + timeoutPath;
 
