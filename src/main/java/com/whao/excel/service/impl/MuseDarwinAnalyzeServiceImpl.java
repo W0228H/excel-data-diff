@@ -72,9 +72,9 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
         log.info("darwinMuseDiffData.size:{}", darwinMuseDiffData.size());
 
         return darwinMuseDiffData.stream()
-                .filter(rowData -> rowData.getDarwinTime().toInstant()
+                /*.filter(rowData -> rowData.getDarwinTime().toInstant()
                         .atZone(ZoneId.systemDefault())
-                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 17, 0, 0)))
+                        .toLocalDateTime().isAfter(LocalDateTime.of(2024, 8, 16, 16, 0)))*/
                 .flatMap(rowData -> {
             String traceId = rowData.getTraceId();
             Date museTime = rowData.getMuseTime();
