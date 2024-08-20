@@ -1,6 +1,5 @@
 package com.whao.excel.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.context.AnalysisContext;
@@ -10,11 +9,11 @@ import com.alibaba.excel.write.metadata.WriteSheet;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.whao.excel.domain.common.FeatureSummarizeSheet;
-import com.whao.excel.domain.common.FeatureTimeoutRate;
 import com.whao.excel.domain.read.DarwinMuseDiffData;
 import com.whao.excel.domain.write.MuseDarwinWriteFeatureData;
 import com.whao.excel.service.AbstractExcelAnalyze;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Triple;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,13 +36,15 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     @Value("${output.path.summarize}")
     private String concordanceRatePath;
 
-    @Value("${output.path.timeoutConclusion}")
-    private String timeoutPath;
-
     /**
      * 一致率总结
      */
     private static final Map<String, BigDecimal> CONCORDANCE_RATIO_SUMMARIZE = new ConcurrentHashMap<>();
+
+    /**
+     * 超时率总结
+     */
+    private static final Map<String, Triple<Long, Integer, BigDecimal>> MUSE_FAIL_RATIO = new ConcurrentHashMap<>();
 
     @Override
     public Map<String, List<MuseDarwinWriteFeatureData>> analyzeExcel(MultipartFile file) throws IOException {
@@ -111,28 +112,16 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
             return;
         }
 
-        String timeoutDataPath = COMMON_PATH + timeoutPath;
-
         String concordanceRateOutputPath = COMMON_PATH + concordanceRatePath;
 
-        // 计算每一个特征的一致率并且按照特征名称进行字典排序
-        List<FeatureSummarizeSheet> summarizeList = consensusRateCalculation(featureMapData);
-
-        // 分析每个特征的超时个数以及超时率
-        List<FeatureTimeoutRate> timeoutRates = analyzeFeatureTimeoutRate(featureMapData);
+        // 计算每一个特征的一致率、超时个数以及超时率并且按照特征名称进行字典排序
+        List<FeatureSummarizeSheet> summarizeList = analyzeFeatureRatio(featureMapData);
 
         // 只输出不一致的数据
         Map<String, List<MuseDarwinWriteFeatureData>> diffData = extraProcess(featureMapData);
 
-        try (ExcelWriter summarizeWriter = EasyExcel.write(timeoutDataPath).build()) {
-            WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征超时率总结")
-                    .head(FeatureTimeoutRate.class)
-                    .build();
-            summarizeWriter.write(timeoutRates, summarizeSheet);
-        }
-
         try (ExcelWriter summarizeWriter = EasyExcel.write(concordanceRateOutputPath).build()) {
-            WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征一致率总结")
+            WriteSheet summarizeSheet = EasyExcel.writerSheet(0, "特征总结")
                     .head(FeatureSummarizeSheet.class)
                     .build();
             summarizeWriter.write(summarizeList, summarizeSheet);
@@ -143,11 +132,13 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
             List<MuseDarwinWriteFeatureData> data = entry.getValue();
             try (ExcelWriter excelWriter = EasyExcel.write(COMMON_PATH + modelKey + ".xlsx").build()) {
                 BigDecimal rate = CONCORDANCE_RATIO_SUMMARIZE.get(modelKey);
-                if (rate == null) {
+                Triple<Long, Integer, BigDecimal> timeoutRate = MUSE_FAIL_RATIO.get(modelKey);
+                if (rate == null || timeoutRate == null) {
                     continue;
                 }
                 MuseDarwinWriteFeatureData museDarwinWriteFeatureData = data.get(0);
                 museDarwinWriteFeatureData.setConcordanceRate(new WriteCellData<>(rate));
+                museDarwinWriteFeatureData.setMuseFailRate(new WriteCellData<>(timeoutRate.getRight()));
                 museDarwinWriteFeatureData.beautifulFormat();
                 WriteSheet sheet = EasyExcel.writerSheet(0, canonicalSheetName(modelKey))
                         .head(MuseDarwinWriteFeatureData.class)
@@ -175,30 +166,6 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
-    /**
-     * 一致率计算
-     *
-     * @param featureMapData data
-     */
-    private List<FeatureSummarizeSheet> consensusRateCalculation(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
-        List<FeatureSummarizeSheet> featureSummarizeSheetList = new ArrayList<>();
-        for (Map.Entry<String, List<MuseDarwinWriteFeatureData>> entry : featureMapData.entrySet()) {
-            String modelKey = entry.getKey();
-            BigDecimal bigDecimal = analyzeConcordanceRatio(entry.getValue());
-            CONCORDANCE_RATIO_SUMMARIZE.put(modelKey, bigDecimal);
-        }
-        for (Map.Entry<String, String> entry : FEATURE_NAME_MAP.entrySet()) {
-            FeatureSummarizeSheet featureSummarize = new FeatureSummarizeSheet();
-            String modelKey = entry.getKey();
-            featureSummarize.setModelName(modelKey);
-            featureSummarize.setDarwinName(entry.getValue());
-            featureSummarize.setConcordanceRate(CONCORDANCE_RATIO_SUMMARIZE.get(modelKey));
-            featureSummarizeSheetList.add(featureSummarize);
-        }
-        featureSummarizeSheetList.sort(Comparator.comparing(FeatureSummarizeSheet::getModelName));
-        return featureSummarizeSheetList;
-    }
-
     private BigDecimal analyzeConcordanceRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
         long concordanceCounts = featureWriteFeatureData.stream()
                 .filter(datum -> new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal(datum.getMuseValue())) == 0)
@@ -208,47 +175,54 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 15, RoundingMode.HALF_UP);
     }
 
+    private Triple<Long, Integer, BigDecimal> analyzeMuseFailRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
+        int size = featureWriteFeatureData.size();
+        long count = featureWriteFeatureData.stream()
+                .filter(datum -> new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) != 0
+                        && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) == 0)
+                .count();
+
+        return Triple.of(count, size, BigDecimal.valueOf(count)
+                .divide(BigDecimal.valueOf(size), 15, RoundingMode.HALF_UP));
+    }
+
     private String getOrDefaultString(JSONObject json, String key) {
         return Optional.ofNullable(json.get(key)).map(Object::toString).orElse("empty");
     }
 
     /**
-     * 超时率
+     * 分析特征的一致率和超时率
      *
      * @param featureMapData data
-     * @return 超时率
+     * @return List<FeatureSummarizeSheet>
      */
-    private List<FeatureTimeoutRate> analyzeFeatureTimeoutRate(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
-        Map<String, FeatureTimeoutRate> timeoutRateMap = new HashMap<>();
+    private List<FeatureSummarizeSheet> analyzeFeatureRatio(Map<String, List<MuseDarwinWriteFeatureData>> featureMapData) {
+        List<FeatureSummarizeSheet> featureSummarizes = new ArrayList<>();
         for (Map.Entry<String, List<MuseDarwinWriteFeatureData>> entry : featureMapData.entrySet()) {
             String modelName = entry.getKey();
             List<MuseDarwinWriteFeatureData> data = entry.getValue();
-            int count = 0;
-            for (MuseDarwinWriteFeatureData datum : data) {
-                if (new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) == 0
-                        && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) != 0) {
-                    count++;
-                }
-            }
-            BigDecimal rate = BigDecimal.valueOf(count).divide(BigDecimal.valueOf(data.size()), 6, RoundingMode.HALF_UP);
-            timeoutRateMap.put(modelName, new FeatureTimeoutRate(FEATURE_NAME_MAP.get(modelName), modelName, count, data.size(), rate));
+            BigDecimal concordanceRate = analyzeConcordanceRatio(data);
+            Triple<Long, Integer, BigDecimal> timeoutRate = analyzeMuseFailRatio(data);
+            CONCORDANCE_RATIO_SUMMARIZE.put(modelName, concordanceRate);
+            MUSE_FAIL_RATIO.put(modelName, timeoutRate);
         }
-        List<FeatureTimeoutRate> timeoutRates = new ArrayList<>();
+
         for (Map.Entry<String, String> entry : FEATURE_NAME_MAP.entrySet()) {
-            String modelName = entry.getKey();
-            FeatureTimeoutRate featureTimeoutRate = new FeatureTimeoutRate();
-            featureTimeoutRate.setModelName(modelName);
-            featureTimeoutRate.setDarwinName(FEATURE_NAME_MAP.get(modelName));
-            FeatureTimeoutRate featureTimeoutRateSource = timeoutRateMap.get(modelName);
-            if (featureTimeoutRateSource == null) {
-                timeoutRates.add(featureTimeoutRate);
-                continue;
-            }
-            BeanUtil.copyProperties(featureTimeoutRateSource, featureTimeoutRate);
-            timeoutRates.add(featureTimeoutRate);
+            FeatureSummarizeSheet featureSummarize = new FeatureSummarizeSheet();
+            String modelKey = entry.getKey();
+            featureSummarize.setModelName(modelKey);
+            featureSummarize.setDarwinName(entry.getValue());
+            featureSummarize.setConcordanceRate(CONCORDANCE_RATIO_SUMMARIZE.get(modelKey));
+            Optional.ofNullable(MUSE_FAIL_RATIO.get(modelKey)).ifPresent(rateTriple -> {
+                featureSummarize.setMuseFailCount(rateTriple.getLeft());
+                featureSummarize.setMuseFailRate(new WriteCellData<>(rateTriple.getRight()));
+                featureSummarize.setQueryCount(rateTriple.getMiddle());
+                featureSummarize.beautyFormat();
+            });
+            featureSummarizes.add(featureSummarize);
         }
-        timeoutRates.sort(Comparator.comparing(FeatureTimeoutRate::getModelName));
-        return timeoutRates;
+        featureSummarizes.sort(Comparator.comparing(FeatureSummarizeSheet::getModelName));
+        return featureSummarizes;
     }
 
     @Override

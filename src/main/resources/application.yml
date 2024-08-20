@@ -9,6 +9,4 @@ spring:
 
 output:
   path:
-    summarize: 特征一致率总结.xlsx
-    timeoutConclusion: 特征超时率总结.xlsx
-
+    summarize: 特征总结.xlsx
