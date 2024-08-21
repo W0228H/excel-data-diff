@@ -44,7 +44,7 @@ public class FeatureSummarizeSheet {
      * muse错误率
      */
     @ColumnWidth(13)
-    @NumberFormat("#.###%")
+    @NumberFormat("0.0000%")
     @ExcelProperty("muse错误率")
     private WriteCellData<BigDecimal> museFailRate;
 

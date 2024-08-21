@@ -53,7 +53,7 @@ public class MuseDarwinWriteFeatureData {
     @ExcelProperty("一致率")
     private WriteCellData<BigDecimal> concordanceRate;
 
-    @NumberFormat("#.###%")
+    @NumberFormat("0.000%")
     @ExcelProperty("muse错误率")
     private WriteCellData<BigDecimal> museFailRate;
 
