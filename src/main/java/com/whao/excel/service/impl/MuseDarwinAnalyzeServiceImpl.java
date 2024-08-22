@@ -13,6 +13,7 @@ import com.whao.excel.domain.read.DarwinMuseDiffData;
 import com.whao.excel.domain.write.MuseDarwinWriteFeatureData;
 import com.whao.excel.service.AbstractExcelAnalyze;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,8 +22,11 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -45,6 +49,11 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
      * 超时率总结
      */
     private static final Map<String, Triple<Long, Integer, BigDecimal>> MUSE_FAIL_RATIO = new ConcurrentHashMap<>();
+
+    /**
+     * 时间分区内个数
+     */
+    private static final Map<String, Pair<Long, BigDecimal>> TIME_RANGE_RATIO = new ConcurrentHashMap<>();
 
     @Override
     public Map<String, List<MuseDarwinWriteFeatureData>> analyzeExcel(MultipartFile file) throws IOException {
@@ -88,13 +97,17 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                         museDarwinWriteFeatureData.setModelName(modelKey);
                         String darwinData = getOrDefaultString(darwinDataJson, modelKey);
                         String museData = getOrDefaultString(museDataJson, modelKey);
-                        if (Objects.equals(darwinData, "empty") && Objects.equals(museData, "empty")) {
+                        if (Objects.equals(darwinData, "") && Objects.equals(museData, "")) {
                             // 过滤掉
                             return null;
                         }
                         museDarwinWriteFeatureData.setDarwinValue(darwinData);
                         museDarwinWriteFeatureData.setMuseValue(museData);
-                        museDarwinWriteFeatureData.setDiff(new BigDecimal(darwinData).compareTo(new BigDecimal(museData)) == 0);
+                        try {
+                            museDarwinWriteFeatureData.setDiff(new BigDecimal(darwinData).compareTo(new BigDecimal(museData)) == 0);
+                        } catch (Exception e) {
+                            museDarwinWriteFeatureData.setDiff(false);
+                        }
                         museDarwinWriteFeatureData.setDarwinTime(darwinTime);
                         museDarwinWriteFeatureData.setMuseTime(museTime);
                         return museDarwinWriteFeatureData;
@@ -160,7 +173,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .map(entry -> new AbstractMap.SimpleEntry<>(
                         entry.getKey(),
                         entry.getValue().stream()
-                                .filter(data -> new BigDecimal(data.getDarwinValue()).compareTo(new BigDecimal(data.getMuseValue())) != 0)
+                                .filter(data -> !data.isDiff())
                                 .collect(Collectors.toList())))
                 .filter(entry -> !entry.getValue().isEmpty())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
@@ -168,7 +181,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
 
     private BigDecimal analyzeConcordanceRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
         long concordanceCounts = featureWriteFeatureData.stream()
-                .filter(datum -> new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal(datum.getMuseValue())) == 0)
+                .filter(MuseDarwinWriteFeatureData::isDiff)
                 .count();
 
         return BigDecimal.valueOf(concordanceCounts)
@@ -178,6 +191,7 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
     private Triple<Long, Integer, BigDecimal> analyzeMuseFailRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
         int size = featureWriteFeatureData.size();
         long count = featureWriteFeatureData.stream()
+                .filter(datum -> !Objects.equals(datum.getDarwinValue(), "") && !Objects.equals(datum.getMuseValue(), ""))
                 .filter(datum -> new BigDecimal(datum.getDarwinValue()).compareTo(new BigDecimal("-9999")) != 0
                         && new BigDecimal(datum.getMuseValue()).compareTo(new BigDecimal("-9999")) == 0)
                 .count();
@@ -186,8 +200,30 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
                 .divide(BigDecimal.valueOf(size), 15, RoundingMode.HALF_UP));
     }
 
+    private Pair<Long, BigDecimal> analyzeSubZoneRatio(List<MuseDarwinWriteFeatureData> featureWriteFeatureData) {
+        long count = featureWriteFeatureData.stream()
+                .filter(datum -> Objects.nonNull(MODEL_DATASOURCE_MAP.get(datum.getModelName())))
+                .filter(datum -> {
+                    String timeRange = DATASOURCE_TIME_MAP.get(MODEL_DATASOURCE_MAP.get(datum.getModelName()));
+                    try {
+                        return isInTimeRange(datum.getMuseTime(), timeRange);
+                    } catch (ParseException e) {
+                        throw new RuntimeException(e);
+                    }
+                }).count();
+        return Pair.of(count, BigDecimal.valueOf(count)
+                .divide(BigDecimal.valueOf(featureWriteFeatureData.size()), 15, RoundingMode.HALF_UP));
+    }
+
     private String getOrDefaultString(JSONObject json, String key) {
-        return Optional.ofNullable(json.get(key)).map(Object::toString).orElse("empty");
+        return Optional.ofNullable(json.get(key)).map(Object::toString).orElse("");
+    }
+
+    private boolean isInTimeRange(Date museTime, String time) throws ParseException {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-M-d HH:mm");
+        Date startTime = sdf.parse(time);
+        Date endTime = new Date(startTime.getTime() + TimeUnit.HOURS.toMillis(1));
+        return !museTime.before(startTime) && !museTime.after(endTime);
     }
 
     /**
@@ -203,8 +239,10 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
             List<MuseDarwinWriteFeatureData> data = entry.getValue();
             BigDecimal concordanceRate = analyzeConcordanceRatio(data);
             Triple<Long, Integer, BigDecimal> timeoutRate = analyzeMuseFailRatio(data);
+            Pair<Long, BigDecimal> timeRangeRate = analyzeSubZoneRatio(data);
             CONCORDANCE_RATIO_SUMMARIZE.put(modelName, concordanceRate);
             MUSE_FAIL_RATIO.put(modelName, timeoutRate);
+            TIME_RANGE_RATIO.put(modelName, timeRangeRate);
         }
 
         for (Map.Entry<String, String> entry : FEATURE_NAME_MAP.entrySet()) {
@@ -215,9 +253,12 @@ public class MuseDarwinAnalyzeServiceImpl extends AbstractExcelAnalyze<Multipart
             featureSummarize.setConcordanceRate(CONCORDANCE_RATIO_SUMMARIZE.get(modelKey));
             Optional.ofNullable(MUSE_FAIL_RATIO.get(modelKey)).ifPresent(rateTriple -> {
                 featureSummarize.setMuseFailCount(rateTriple.getLeft());
-                featureSummarize.setMuseFailRate(new WriteCellData<>(rateTriple.getRight()));
+                featureSummarize.setMuseFailRate(rateTriple.getRight());
                 featureSummarize.setQueryCount(rateTriple.getMiddle());
-                featureSummarize.beautyFormat();
+            });
+            Optional.ofNullable(TIME_RANGE_RATIO.get(modelKey)).ifPresent(ratePair -> {
+                featureSummarize.setMuseTimeRangeCount(ratePair.getKey());
+                featureSummarize.setMuseTimeRangeErrRate(ratePair.getValue());
             });
             featureSummarizes.add(featureSummarize);
         }

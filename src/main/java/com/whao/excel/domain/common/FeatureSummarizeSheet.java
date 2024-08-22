@@ -33,27 +33,18 @@ public class FeatureSummarizeSheet {
     private String modelName;
 
     /**
-     * 一致率
-     */
-    @ColumnWidth(9)
-    @NumberFormat("#.###%")
-    @ExcelProperty("一致率")
-    private BigDecimal concordanceRate;
-
-    /**
-     * muse错误率
-     */
-    @ColumnWidth(13)
-    @NumberFormat("0.0000%")
-    @ExcelProperty("muse错误率")
-    private WriteCellData<BigDecimal> museFailRate;
-
-    /**
      * muse错误个数
      */
     @ColumnWidth(9)
     @ExcelProperty("muse错误个数")
     private Long museFailCount;
+
+    /**
+     * muse处于分区点个数
+     */
+    @ColumnWidth(9)
+    @ExcelProperty("muse处于分区点个数")
+    private Long museTimeRangeCount;
 
     /**
      * 请求个数
@@ -62,8 +53,28 @@ public class FeatureSummarizeSheet {
     @ExcelProperty("请求个数")
     private Integer queryCount;
 
-    public void beautyFormat() {
-        this.museFailRate.setType(CellDataTypeEnum.NUMBER);
-    }
+    /**
+     * muse错误率
+     */
+    @ColumnWidth(13)
+    @NumberFormat("0.0000%")
+    @ExcelProperty("muse错误率")
+    private BigDecimal museFailRate;
+
+    /**
+     * muse处于分区错误率
+     */
+    @ColumnWidth(13)
+    @NumberFormat("0.0000%")
+    @ExcelProperty("muse处于分区错误率")
+    private BigDecimal museTimeRangeErrRate;
+
+    /**
+     * 一致率
+     */
+    @ColumnWidth(9)
+    @NumberFormat("#.###%")
+    @ExcelProperty("一致率")
+    private BigDecimal concordanceRate;
 
 }

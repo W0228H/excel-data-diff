@@ -10,7 +10,7 @@ import java.io.IOException;
  */
 public interface ExcelAnalyzeService<Req extends MultipartFile, Res> {
 
-    void preProcess();
+    void preProcess() throws IOException;
 
     Res analyzeExcel(Req file) throws IOException;
 
